@@ -82,17 +82,28 @@ function createScheduleJob(schedule) {
         cronExpr = schedule.cronExpression.replace(/ \d{4}$/, '');
     }
     
+    console.log(`スケジュール登録: ${schedule.name}`);
+    console.log(`元のCron式: ${schedule.cronExpression}`);
+    console.log(`実行用Cron式: ${cronExpr}`);
+    console.log(`特定日付フラグ: ${isSpecificDate}`);
+    if (isSpecificDate) {
+        console.log(`対象年: ${targetYear}`);
+    }
+    
     const job = cron.schedule(cronExpr, async () => {
+        console.log(`=== スケジュール実行トリガー: ${schedule.name} ===`);
+        
         // 特定の日付のスケジュールの場合、年をチェック
         if (isSpecificDate) {
             const currentYear = new Date().getFullYear();
+            console.log(`現在年: ${currentYear}, 対象年: ${targetYear}`);
             if (currentYear !== targetYear) {
                 console.log(`スケジュール ${schedule.name}: 対象年（${targetYear}年）ではないためスキップ`);
                 return;
             }
         }
         
-        console.log(`スケジュール実行: ${schedule.name}`);
+        console.log(`スケジュール実行開始: ${schedule.name}`);
         
         const result = await sendLineNotification(
             schedule.message,
