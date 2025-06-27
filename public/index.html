@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINE スケジュール通知管理</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>LINE スケジュール通知管理</h1>
+        
+        <div id="config-warning" class="warning" style="display: none;">
+            ⚠️ LINE APIの設定が完了していません。.envファイルを設定してください。
+        </div>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('schedules')">スケジュール管理</button>
+            <button class="tab-button" onclick="showTab('targets')">送信先管理</button>
+            <button class="tab-button" onclick="showTab('history')">送信履歴</button>
+            <button class="tab-button" onclick="showTab('debug')">ID取得・デバッグ</button>
+        </div>
+
+        <!-- スケジュール管理タブ -->
+        <div id="schedules-tab" class="tab-content active">
+            <div class="section">
+                <h2>新規スケジュール作成</h2>
+                <form id="schedule-form">
+                    <div class="form-group">
+                        <label for="schedule-name">スケジュール名</label>
+                        <input type="text" id="schedule-name" required placeholder="例: 朝礼リマインダー">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="schedule-message">通知メッセージ</label>
+                        <textarea id="schedule-message" rows="4" required placeholder="送信するメッセージを入力"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>送信先タイプ</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="targetType" value="individual" checked>
+                                個人
+                            </label>
+                            <label>
+                                <input type="radio" name="targetType" value="group">
+                                グループ
+                            </label>
+                            <label>
+                                <input type="radio" name="targetType" value="broadcast">
+                                全体配信
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="target-select-group">
+                        <label for="target-select">送信先</label>
+                        <select id="target-select">
+                            <option value="">選択してください</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>スケジュール設定方法を選択</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="scheduleMode" value="simple" checked onchange="toggleScheduleMode()">
+                                簡単設定
+                            </label>
+                            <label>
+                                <input type="radio" name="scheduleMode" value="advanced" onchange="toggleScheduleMode()">
+                                詳細設定（Cron式）
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 簡単設定モード -->
+                    <div id="simple-schedule" class="schedule-mode">
+                        <div class="form-group">
+                            <label>頻度</label>
+                            <select id="frequency" onchange="updateSimpleSchedule()">
+                                <option value="once">特定の日付（1回のみ）</option>
+                                <option value="daily">毎日</option>
+                                <option value="weekdays">平日のみ</option>
+                                <option value="weekly">毎週</option>
+                                <option value="monthly">毎月</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="weekday-group" style="display: none;">
+                            <label>曜日</label>
+                            <select id="weekday">
+                                <option value="1">月曜日</option>
+                                <option value="2">火曜日</option>
+                                <option value="3">水曜日</option>
+                                <option value="4">木曜日</option>
+                                <option value="5">金曜日</option>
+                                <option value="6">土曜日</option>
+                                <option value="0">日曜日</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="specific-date-group" style="display: none;">
+                            <label for="specific-date">実行日</label>
+                            <input type="date" id="specific-date" onchange="updateSimpleSchedule()">
+                            <small>特定の日付に1回だけ実行されます</small>
+                        </div>
+
+                        <div class="form-group" id="monthday-group" style="display: none;">
+                            <label for="monthday">日付</label>
+                            <input type="number" id="monthday" min="1" max="31" placeholder="例: 15" onchange="updateSimpleSchedule()">
+                            <small>毎月の指定日に実行（1-31で入力、31は月末として扱われます）</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="hour">時刻</label>
+                            <div class="time-inputs">
+                                <select id="hour">
+                                    <option value="6">6時</option>
+                                    <option value="7">7時</option>
+                                    <option value="8">8時</option>
+                                    <option value="9" selected>9時</option>
+                                    <option value="10">10時</option>
+                                    <option value="11">11時</option>
+                                    <option value="12">12時</option>
+                                    <option value="13">13時</option>
+                                    <option value="14">14時</option>
+                                    <option value="15">15時</option>
+                                    <option value="16">16時</option>
+                                    <option value="17">17時</option>
+                                    <option value="18">18時</option>
+                                    <option value="19">19時</option>
+                                    <option value="20">20時</option>
+                                    <option value="21">21時</option>
+                                    <option value="22">22時</option>
+                                </select>
+                                <select id="minute">
+                                    <option value="0" selected>00分</option>
+                                    <option value="15">15分</option>
+                                    <option value="30">30分</option>
+                                    <option value="45">45分</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="schedule-preview">
+                            <strong>設定内容:</strong> <span id="schedule-preview-text">平日の9:00</span>
+                        </div>
+                    </div>
+
+                    <!-- 詳細設定モード -->
+                    <div id="advanced-schedule" class="schedule-mode" style="display: none;">
+                        <div class="form-group">
+                            <label>よく使うパターン</label>
+                            <div class="schedule-presets">
+                                <button type="button" class="preset-btn" onclick="setCronExpression('0 9 * * 1-5')">平日9時</button>
+                                <button type="button" class="preset-btn" onclick="setCronExpression('0 18 * * 1-5')">平日18時</button>
+                                <button type="button" class="preset-btn" onclick="setCronExpression('0 10 * * 1')">毎週月曜10時</button>
+                                <button type="button" class="preset-btn" onclick="setCronExpression('0 9 1 * *')">毎月1日9時</button>
+                                <button type="button" class="preset-btn" onclick="setCronExpression('*/30 * * * *')">30分ごと</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cron-expression">Cron式</label>
+                            <input type="text" id="cron-expression" placeholder="例: 0 9 * * 1-5">
+                            <small>分 時 日 月 曜日 の形式（例: 0 9 * * 1-5 = 平日9時）</small>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-btn">スケジュール作成</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>登録済みスケジュール</h2>
+                <div id="schedules-list" class="list-container"></div>
+            </div>
+        </div>
+
+        <!-- 送信先管理タブ -->
+        <div id="targets-tab" class="tab-content">
+            <div class="section">
+                <h2>新規送信先登録</h2>
+                <form id="target-form">
+                    <div class="form-group">
+                        <label for="target-name">名前</label>
+                        <input type="text" id="target-name" required placeholder="例: 営業部">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target-line-id">LINE ID</label>
+                        <input type="text" id="target-line-id" required placeholder="LINE IDまたはグループID">
+                    </div>
+
+                    <div class="form-group">
+                        <label>タイプ</label>
+                        <div class="radio-group">
+                            <label>
+                                <input type="radio" name="targetTypeRegister" value="individual" checked>
+                                個人
+                            </label>
+                            <label>
+                                <input type="radio" name="targetTypeRegister" value="group">
+                                グループ
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target-description">説明（任意）</label>
+                        <textarea id="target-description" rows="2" placeholder="メモや説明を入力"></textarea>
+                    </div>
+
+                    <button type="submit" class="submit-btn">送信先を登録</button>
+                </form>
+            </div>
+
+            <div class="section">
+                <h2>登録済み送信先</h2>
+                <div id="targets-list" class="list-container"></div>
+            </div>
+        </div>
+
+        <!-- 送信履歴タブ -->
+        <div id="history-tab" class="tab-content">
+            <div class="section">
+                <h2>送信履歴</h2>
+                <div id="history-list" class="list-container"></div>
+            </div>
+        </div>
+
+        <!-- デバッグタブ -->
+        <div id="debug-tab" class="tab-content">
+            <div class="section">
+                <h2>グループID・ユーザーID取得</h2>
+                <div class="debug-info">
+                    <div class="info-box">
+                        <h3>🔧 セットアップ手順</h3>
+                        <div class="warning-box">
+                            ⚠️ <strong>重要:</strong> LINE WebhookはHTTPS必須です。クラウドにデプロイしてHTTPS URLを取得してください。
+                        </div>
+                        <ol>
+                            <li><strong>アプリをクラウドにデプロイ</strong>（Railway/Render/Heroku等）</li>
+                            <li>Webhook URL: <code id="webhook-url">https://your-app.railway.app/webhook</code> 
+                                <button class="copy-btn" onclick="copyWebhookUrl()">コピー</button>
+                            </li>
+                            <li><strong>LINE Developers</strong>でWebhook URLを設定</li>
+                            <li><strong>「Webhookの利用」</strong>を<span class="highlight">オン</span>にする</li>
+                            <li>LINE公式アカウントをグループに招待</li>
+                            <li>グループでメッセージを送信</li>
+                            <li>下記のリアルタイムログでIDを確認</li>
+                        </ol>
+                    </div>
+
+                    <div class="info-box">
+                        <h3>📱 グループIDの取得方法</h3>
+                        <div class="steps">
+                            <div class="step">
+                                <span class="step-number">1</span>
+                                <div class="step-content">
+                                    <strong>BOTをグループに追加</strong>
+                                    <p>LINE公式アカウントをグループに招待すると、自動でグループIDが表示されます</p>
+                                </div>
+                            </div>
+                            <div class="step">
+                                <span class="step-number">2</span>
+                                <div class="step-content">
+                                    <strong>グループでメッセージ送信</strong>
+                                    <p>グループ内で任意のメッセージを送信すると、ユーザーIDとグループIDが表示されます</p>
+                                </div>
+                            </div>
+                            <div class="step">
+                                <span class="step-number">3</span>
+                                <div class="step-content">
+                                    <strong>コンソールでIDを確認</strong>
+                                    <p>サーバーのコンソールログで🎯マークのついたIDを確認してください</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <h3>🔍 リアルタイムログ（要設定）</h3>
+                        <div id="webhook-status" class="status-indicator">
+                            <span class="status-dot"></span>
+                            <span>Webhook設定状況を確認中...</span>
+                        </div>
+                        <div class="log-container">
+                            <div id="debug-logs">
+                                <p class="log-message">💡 Webhookを設定後、ここにリアルタイムでイベントが表示されます</p>
+                                <p class="log-message">👥 グループに招待された時: <code>join</code>イベント</p>
+                                <p class="log-message">💬 メッセージ送信時: <code>message</code>イベント</p>
+                                <p class="log-message">🎯 重要: グループIDは<span class="highlight">グループのメッセージ</span>で取得できます</p>
+                            </div>
+                        </div>
+                        <button class="action-btn secondary" onclick="clearLogs()">ログクリア</button>
+                    </div>
+
+                    <div class="info-box">
+                        <h3>❓ トラブルシューティング</h3>
+                        <div class="troubleshooting">
+                            <details>
+                                <summary>Webhookエラーが出る場合</summary>
+                                <ul>
+                                    <li>URLが正しく設定されているか確認</li>
+                                    <li>サーバーが起動しているか確認</li>
+                                    <li>ファイアウォールでポート3000が開いているか確認</li>
+                                    <li>ngrokやCloudflareを使って外部アクセス可能にする</li>
+                                </ul>
+                            </details>
+                            <details>
+                                <summary>グループIDが表示されない場合</summary>
+                                <ul>
+                                    <li>BOTがグループのメンバーになっているか確認</li>
+                                    <li>Messaging APIの「Webhookの利用」がオンになっているか確認</li>
+                                    <li>グループでメッセージを送信してみる</li>
+                                </ul>
+                            </details>
+                            <details>
+                                <summary>外部からアクセスできない場合</summary>
+                                <ul>
+                                    <li><a href="https://ngrok.com/" target="_blank">ngrok</a>を使用: <code>ngrok http 3000</code></li>
+                                    <li>クラウドサーバーにデプロイする</li>
+                                    <li>ルーターのポートフォワーディングを設定</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
