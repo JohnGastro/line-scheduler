@@ -446,6 +446,25 @@ small {
     margin-bottom: 0;
 }
 
+.log-entry {
+    margin-bottom: 8px;
+    line-height: 1.4;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.log-entry:last-child {
+    margin-bottom: 0;
+}
+
+.group-id-highlight {
+    background-color: #ffeb3b;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: bold;
+    color: #333;
+}
+
 .troubleshooting details {
     margin-bottom: 10px;
     border: 1px solid #ddd;

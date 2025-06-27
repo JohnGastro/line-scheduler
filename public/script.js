@@ -542,12 +542,132 @@ async function handleScheduleSubmit(e) {
 function initializeDebugTab() {
     // WebhookURLにIPアドレスを設定
     updateWebhookUrl();
+    
+    // リアルタイムログの接続
+    connectToLogStream();
+}
+
+// リアルタイムログストリームに接続
+function connectToLogStream() {
+    if (typeof(EventSource) !== "undefined") {
+        const eventSource = new EventSource('/api/logs/stream');
+        
+        eventSource.onopen = function() {
+            updateWebhookStatus('connected', '🟢 リアルタイムログ接続中');
+        };
+        
+        eventSource.onmessage = function(event) {
+            try {
+                const logData = JSON.parse(event.data);
+                addRealtimeLog(logData);
+            } catch (error) {
+                console.error('ログデータの解析エラー:', error);
+            }
+        };
+        
+        eventSource.onerror = function() {
+            updateWebhookStatus('error', '🔴 接続エラー - 再接続中...');
+            
+            // 再接続を試行
+            setTimeout(() => {
+                connectToLogStream();
+            }, 5000);
+        };
+        
+        // ページ離脱時に接続を閉じる
+        window.addEventListener('beforeunload', () => {
+            eventSource.close();
+        });
+    } else {
+        updateWebhookStatus('unsupported', '❌ ブラウザがServer-Sent Eventsに対応していません');
+    }
+}
+
+// Webhook接続状況を更新
+function updateWebhookStatus(status, message) {
+    const statusElement = document.getElementById('webhook-status');
+    const statusDot = statusElement.querySelector('.status-dot');
+    const statusText = statusElement.querySelector('span:last-child');
+    
+    statusText.textContent = message;
+    
+    // ステータスに応じてドットの色を変更
+    statusDot.className = 'status-dot';
+    if (status === 'connected') {
+        statusDot.style.backgroundColor = '#28a745';
+        statusDot.style.animation = 'none';
+    } else if (status === 'error') {
+        statusDot.style.backgroundColor = '#dc3545';
+        statusDot.style.animation = 'pulse 1s infinite';
+    } else {
+        statusDot.style.backgroundColor = '#ffc107';
+        statusDot.style.animation = 'pulse 2s infinite';
+    }
+}
+
+// リアルタイムログを追加
+function addRealtimeLog(logData) {
+    const logsContainer = document.getElementById('debug-logs');
+    
+    // 初期メッセージを削除
+    if (logsContainer.children.length === 1 && 
+        logsContainer.children[0].textContent.includes('💡 Webhookを設定後')) {
+        logsContainer.innerHTML = '';
+    }
+    
+    const logElement = document.createElement('div');
+    logElement.className = 'log-entry';
+    
+    let logContent = '';
+    
+    if (logData.type === 'connected') {
+        logContent = `[${logData.timestamp}] ${logData.message}`;
+        logElement.style.color = '#28a745';
+    } else if (logData.type === 'webhook') {
+        logContent = `[${logData.timestamp}] ${getEventEmoji(logData.eventType)} ${logData.eventType}イベント | ${logData.message}`;
+        
+        // グループIDがある場合は強調表示
+        if (logData.groupId) {
+            logElement.innerHTML = logContent.replace(
+                logData.groupId, 
+                `<span class="group-id-highlight">${logData.groupId}</span>`
+            );
+        } else {
+            logElement.textContent = logContent;
+        }
+    } else {
+        logElement.textContent = `[${logData.timestamp}] ${logData.message}`;
+    }
+    
+    if (!logElement.innerHTML) {
+        logElement.textContent = logContent;
+    }
+    
+    logsContainer.appendChild(logElement);
+    logsContainer.scrollTop = logsContainer.scrollHeight;
+    
+    // ログが多くなりすぎた場合、古いものを削除
+    if (logsContainer.children.length > 100) {
+        logsContainer.removeChild(logsContainer.firstChild);
+    }
+}
+
+// イベントタイプに応じた絵文字を取得
+function getEventEmoji(eventType) {
+    switch (eventType) {
+        case 'message': return '💬';
+        case 'join': return '✅';
+        case 'leave': return '❌';
+        case 'follow': return '👥';
+        case 'unfollow': return '👋';
+        default: return '📝';
+    }
 }
 
 // WebhookURLの更新
 function updateWebhookUrl() {
-    // クラウドデプロイ用プレースホルダー
-    const webhookUrl = `https://your-app.railway.app/webhook`;
+    // 実際のRailway URLを使用
+    const webhookUrl = `https://line-scheduler-production.up.railway.app/webhook`;
     document.getElementById('webhook-url').textContent = webhookUrl;
 }
 
@@ -573,7 +693,7 @@ function copyWebhookUrl() {
 // ログをクリア
 function clearLogs() {
     const logsContainer = document.getElementById('debug-logs');
-    logsContainer.innerHTML = '<p class="log-message">💡 ログをクリアしました。新しいイベントを待機中...</p>';
+    logsContainer.innerHTML = '<div class="log-entry">💡 ログをクリアしました。新しいイベントを待機中...</div>';
 }
 
 // デバッグログに追加（実際には使用されないが、将来の拡張用）

@@ -16,6 +16,9 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
+// リアルタイムログ用のクライアント管理
+let sseClients = [];
+
 const LINE_API_URL = 'https://api.line.me/v2/bot/message/push';
 const LINE_MULTICAST_URL = 'https://api.line.me/v2/bot/message/multicast';
 const LINE_BROADCAST_URL = 'https://api.line.me/v2/bot/message/broadcast';
@@ -144,6 +147,47 @@ async function startAllSchedules() {
     console.log(`${schedules.length}個のスケジュールを開始しました`);
 }
 
+// リアルタイムログ用のServer-Sent Events
+app.get('/api/logs/stream', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // クライアントを配列に追加
+    const clientId = Date.now();
+    const client = { id: clientId, res };
+    sseClients.push(client);
+
+    // 接続確認メッセージ
+    res.write(`data: ${JSON.stringify({
+        type: 'connected',
+        message: '🟢 リアルタイムログ接続完了',
+        timestamp: new Date().toLocaleTimeString('ja-JP')
+    })}\n\n`);
+
+    // クライアントが切断した時の処理
+    req.on('close', () => {
+        sseClients = sseClients.filter(client => client.id !== clientId);
+        console.log(`リアルタイムログクライアント切断: ${clientId}`);
+    });
+});
+
+// ログをすべてのクライアントに送信する関数
+function broadcastLog(logData) {
+    const message = `data: ${JSON.stringify(logData)}\n\n`;
+    sseClients.forEach(client => {
+        try {
+            client.res.write(message);
+        } catch (error) {
+            console.error('SSE送信エラー:', error);
+        }
+    });
+}
+
 // ルートページ
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -155,27 +199,50 @@ app.post('/webhook', (req, res) => {
     
     if (events && events.length > 0) {
         events.forEach(event => {
+            // コンソールログ（従来通り）
             console.log('=== LINE Webhook イベント ===');
             console.log('イベントタイプ:', event.type);
             console.log('ユーザーID:', event.source.userId);
             
+            // リアルタイムログ用のデータ作成
+            const logData = {
+                type: 'webhook',
+                eventType: event.type,
+                userId: event.source.userId,
+                timestamp: new Date().toLocaleTimeString('ja-JP')
+            };
+            
             if (event.source.type === 'group') {
                 console.log('🎯 グループID:', event.source.groupId);
                 console.log('グループ名取得可能');
+                logData.groupId = event.source.groupId;
+                logData.sourceType = 'group';
+                logData.message = `🎯 グループID: ${event.source.groupId}`;
             } else if (event.source.type === 'room') {
                 console.log('🎯 ルームID:', event.source.roomId);
+                logData.roomId = event.source.roomId;
+                logData.sourceType = 'room';
+                logData.message = `🎯 ルームID: ${event.source.roomId}`;
             } else {
                 console.log('個人チャット');
+                logData.sourceType = 'user';
+                logData.message = '👤 個人チャット';
             }
             
             if (event.type === 'message') {
                 console.log('メッセージ:', event.message.text);
+                logData.messageText = event.message.text;
+                logData.message += ` | 💬 メッセージ: ${event.message.text}`;
             }
             
             if (event.type === 'join') {
                 console.log('✅ BOTがグループに追加されました');
                 console.log('グループID:', event.source.groupId);
+                logData.message = `✅ BOTがグループに追加されました | 🎯 グループID: ${event.source.groupId}`;
             }
+            
+            // リアルタイムログに送信
+            broadcastLog(logData);
             
             console.log('==============================');
         });
